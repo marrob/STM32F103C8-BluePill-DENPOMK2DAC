@@ -24,7 +24,7 @@
 #include "LiveLed.h"
 #include "vt100.h"
 #include "SSD1306_128x32_I2C.h"
-#include "FreqMeter.h"
+#include "FrMeter.h"
 #include <stdio.h>
 /* USER CODE END Includes */
 
@@ -34,7 +34,7 @@
 
 typedef struct _Devic_t
 {
-  FreqMeter_t *FreqMeter;
+  FrMeter_t *FreqMeter;
 }Device_t;
 
 /* USER CODE END PTD */
@@ -125,8 +125,8 @@ int main(void)
   SSD1306_DisplayUpdate();
 
   /*** FreqMeter ***/
-  Device.FreqMeter = FreqMeterInit();
-  FreqMeterMeasStart();
+  Device.FreqMeter = FrMeterInit();
+  FrMeterStart();
 
 #ifdef DEBUG
   printf(VT100_ATTR_RED);
@@ -279,12 +279,22 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(LIVE_LED_GPIO_Port, LIVE_LED_Pin, GPIO_PIN_RESET);
 
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(TIMEBASE_GPIO_Port, TIMEBASE_Pin, GPIO_PIN_RESET);
+
   /*Configure GPIO pin : LIVE_LED_Pin */
   GPIO_InitStruct.Pin = LIVE_LED_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(LIVE_LED_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : TIMEBASE_Pin */
+  GPIO_InitStruct.Pin = TIMEBASE_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(TIMEBASE_GPIO_Port, &GPIO_InitStruct);
 
 }
 

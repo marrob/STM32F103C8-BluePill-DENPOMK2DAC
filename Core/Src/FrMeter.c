@@ -6,7 +6,8 @@
  */
 
 /* Includes ------------------------------------------------------------------*/
-#include "FreqMeter.h"
+#include "FrMeter.h"
+#include "main.h"
 /* Private define ------------------------------------------------------------*/
 
 #define TIM_TIMBASE TIM2
@@ -21,48 +22,53 @@
 
 TIM_HandleTypeDef hCounter;
 TIM_HandleTypeDef hTimebase;
-FreqMeter_t _freqMeter;
+FrMeter_t _frMeter;
 
+FrConfig_t FrConfigs[] =
+{
+    {800, 1000},
+    {80, 100},
+    {8, 10}
+};
 
 /* Private function prototypes -----------------------------------------------*/
-void TimebaseInit(void);
-void CounterInit(void);
+static void TimebaseInit(void);
+static void CounterInit(void);
 
 
 
 /* Private user code ---------------------------------------------------------*/
-FreqMeter_t *FreqMeterInit(void)
+FrMeter_t *FrMeterInit(void)
 {
   TimebaseInit();
   CounterInit();
-  return &_freqMeter;
+  return &_frMeter;
+}
+
+void FrMeterStart(void)
+{
+  CounterValue = 0;
+  TimebaseValue = 0;
+  __HAL_TIM_SET_PRESCALER(&hTimebase, 800);
+  __HAL_TIM_ENABLE_IT(&hTimebase, TIM_IT_UPDATE);
+  TimebaseStart();
+  CoutnerStart();
 }
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
    if(htim->Instance == TIM_TIMBASE)
    {
-     _freqMeter.Counter = CounterValue;
+     _frMeter.Counter = CounterValue;
      CounterValue = 0;
-     _freqMeter.OutOfRange = 0;
+     _frMeter.OutOfRange = 0;
+     HAL_GPIO_TogglePin(TIMEBASE_GPIO_Port, TIMEBASE_Pin);
    }
    else if(htim->Instance == TIM_COUNTER)
    {
-     _freqMeter.OutOfRange = 1;
+     _frMeter.OutOfRange = 1;
    }
 }
-
-
-void FreqMeterMeasStart()
-{
-  CounterValue = 0;
-  TimebaseValue = 0;
-  __HAL_TIM_ENABLE_IT(&hTimebase, TIM_IT_UPDATE);
-  TimebaseStart();
-  CoutnerStart();
-}
-
-
 void TimebaseInit(void)
 {
 
@@ -127,12 +133,6 @@ void CounterInit(void)
 }
 
 
-/**
-* @brief TIM_Base MSP Initialization
-* This function configures the hardware resources used in this example
-* @param htim_base: TIM_Base handle pointer
-* @retval None
-*/
 void HAL_TIM_Base_MspInit(TIM_HandleTypeDef* htim_base)
 {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
@@ -146,8 +146,7 @@ void HAL_TIM_Base_MspInit(TIM_HandleTypeDef* htim_base)
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
     HAL_NVIC_SetPriority(TIM1_UP_IRQn, 0, 0);
     HAL_NVIC_EnableIRQ(TIM1_UP_IRQn);
-    HAL_NVIC_SetPriority(TIM1_CC_IRQn, 0, 0);
-    HAL_NVIC_EnableIRQ(TIM1_CC_IRQn);
+
   }
   else if(htim_base->Instance==TIM2)
   {

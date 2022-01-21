@@ -92,6 +92,8 @@ void Error_Handler(void);
 /* Private defines -----------------------------------------------------------*/
 #define LIVE_LED_Pin GPIO_PIN_13
 #define LIVE_LED_GPIO_Port GPIOC
+#define TIMEBASE_Pin GPIO_PIN_12
+#define TIMEBASE_GPIO_Port GPIOB
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */

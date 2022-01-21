@@ -11,13 +11,20 @@
 /* Includes ------------------------------------------------------------------*/
 #include "stm32f1xx_hal.h"
 /* Exported types ------------------------------------------------------------*/
-typedef struct _FreqMeter_t
+typedef struct _FrMeter_t
 {
   uint16_t Counter;
   uint8_t ConfigIndex;
   uint8_t OutOfRange;
 
-}FreqMeter_t;
+}FrMeter_t;
+
+typedef struct _FrConfig_t
+{
+  uint16_t TimbasePrescaler;
+  uint16_t TimebaseMs;
+
+}FrConfig_t;
 
 
 /* Exported constants --------------------------------------------------------*/
@@ -27,8 +34,8 @@ typedef struct _FreqMeter_t
 extern TIM_HandleTypeDef hCounter;
 extern TIM_HandleTypeDef hTimebase;
 
-FreqMeter_t *FreqMeterInit(void);
-
+FrMeter_t *FrMeterInit(void);
+void FrMeterStart(void);
 
 
 #endif /* SRC_FREQMETER_H_ */
