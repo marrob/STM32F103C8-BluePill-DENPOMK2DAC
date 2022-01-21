@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include "LiveLed.h"
 #include "vt100.h"
+#include "SSD1306_128x32_I2C.h"
 #include <stdio.h>
 /* USER CODE END Includes */
 
@@ -41,6 +42,8 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+I2C_HandleTypeDef hi2c2;
+
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
 
@@ -56,9 +59,11 @@ static void MX_GPIO_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_USART1_UART_Init(void);
+static void MX_I2C2_Init(void);
 /* USER CODE BEGIN PFP */
 void LiveLedOff(void);
 void LiveLedOn(void);
+uint8_t DisplayI2CWrite(uint8_t* wdata, size_t wlength);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -97,11 +102,26 @@ int main(void)
   MX_TIM1_Init();
   MX_TIM2_Init();
   MX_USART1_UART_Init();
+  MX_I2C2_Init();
   /* USER CODE BEGIN 2 */
 
   printf(VT100_CLEARSCREEN);
   printf(VT100_CURSORHOME);
   printf(VT100_ATTR_RESET);
+
+  SSD1306_Init(DisplayI2CWrite);
+ // SSD1306_DisplayClear();
+  SSD1306_DisplayUpdate();
+
+  SSD1306_DrawPixel(0, 0, SSD1306_WHITE);
+  SSD1306_DrawPixel(SSD1306_WIDTH - 1, SSD1306_HEIGHT - 1, SSD1306_WHITE);
+  SSD1306_DrawLine(0, 1, 127, 1, SSD1306_WHITE);
+  SSD1306_DrawLine(0, 2, 127, 2, SSD1306_WHITE);
+  SSD1306_DrawLine(3, 3, 4, 4, SSD1306_WHITE);
+
+  SSD1306_SetCursor(0, 4);
+  SSD1306_DrawString("Hello World", &GfxFont7x8, SSD1306_WHITE );
+  SSD1306_DisplayUpdate();
 
 #ifdef DEBUG
   printf(VT100_ATTR_RED);
@@ -118,8 +138,6 @@ int main(void)
   LiveLedInit(&hLiveLed);
 
   /* USER CODE END 2 */
-
-
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
@@ -169,6 +187,40 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief I2C2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C2_Init(void)
+{
+
+  /* USER CODE BEGIN I2C2_Init 0 */
+
+  /* USER CODE END I2C2_Init 0 */
+
+  /* USER CODE BEGIN I2C2_Init 1 */
+
+  /* USER CODE END I2C2_Init 1 */
+  hi2c2.Instance = I2C2;
+  hi2c2.Init.ClockSpeed = 100000;
+  hi2c2.Init.DutyCycle = I2C_DUTYCYCLE_2;
+  hi2c2.Init.OwnAddress1 = 0;
+  hi2c2.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c2.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c2.Init.OwnAddress2 = 0;
+  hi2c2.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c2.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C2_Init 2 */
+
+  /* USER CODE END I2C2_Init 2 */
+
 }
 
 /**
@@ -310,6 +362,7 @@ static void MX_GPIO_Init(void)
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
@@ -341,6 +394,17 @@ int _write(int file, char *ptr, int len)
   HAL_UART_Transmit(&huart1, (uint8_t*)ptr, len, 100);
   return len;
 }
+
+/* Display -------------------------------------------------------------------*/
+uint8_t DisplayI2CWrite(uint8_t* wdata, size_t wlength){
+    uint8_t address = 0x78;
+    while (HAL_I2C_GetState(&hi2c2) != HAL_I2C_STATE_READY) {}
+    while (HAL_I2C_IsDeviceReady(&hi2c2, address, 3, 300) != HAL_OK) { }
+    HAL_I2C_Master_Transmit(&hi2c2, address, wdata, wlength, 100);
+    while (HAL_I2C_GetState(&hi2c2) != HAL_I2C_STATE_READY) {}
+    return 0;
+}
+
 /* USER CODE END 4 */
 
 /**
