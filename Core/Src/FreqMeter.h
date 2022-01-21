@@ -9,6 +9,7 @@
 #ifndef SRC_FREQMETER_H_
 #define SRC_FREQMETER_H_
 /* Includes ------------------------------------------------------------------*/
+#include "stm32f1xx_hal.h"
 /* Exported types ------------------------------------------------------------*/
 typedef struct _FreqMeter_t
 {
@@ -23,7 +24,10 @@ typedef struct _FreqMeter_t
 /* Exported macro ------------------------------------------------------------*/
 /* Exported functions ------------------------------------------------------- */
 
-void FreqMeterInit(void);
+extern TIM_HandleTypeDef hCounter;
+extern TIM_HandleTypeDef hTimebase;
+
+FreqMeter_t *FreqMeterInit(void);
 
 
 
