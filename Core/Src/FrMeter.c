@@ -28,7 +28,7 @@ FrConfig_t FrMeterConfigs[] =
 {
     {800, 60000, 1},
     {80, 60000, 10},
-    {8, 60000, 100},
+    {8, 53400, 100},
     {1, 48000, 1000}
 };
 
@@ -74,7 +74,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
      _frMeter.Counter = CounterValue;
      CounterValue = 0;
      _frMeter.OutOfRange = 0;
-     //HAL_GPIO_TogglePin(TIMEBASE_GPIO_Port, TIMEBASE_Pin);
+     HAL_GPIO_TogglePin(TIMEBASE_GPIO_Port, TIMEBASE_Pin);
    }
    else if(htim->Instance == TIM_COUNTER)
    {
