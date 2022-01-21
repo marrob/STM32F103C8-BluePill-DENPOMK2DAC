@@ -24,12 +24,15 @@ TIM_HandleTypeDef hCounter;
 TIM_HandleTypeDef hTimebase;
 FrMeter_t _frMeter;
 
-FrConfig_t FrConfigs[] =
+FrConfig_t FrMeterConfigs[] =
 {
-    {800, 1000},
-    {80, 100},
-    {8, 10}
+    {800, 60000, 1},
+    {80, 60000, 10},
+    {8, 60000, 100},
+    {1, 48000, 1000}
 };
+
+
 
 /* Private function prototypes -----------------------------------------------*/
 static void TimebaseInit(void);
@@ -45,15 +48,24 @@ FrMeter_t *FrMeterInit(void)
   return &_frMeter;
 }
 
-void FrMeterStart(void)
+void FrMeterStart(FrMeter_t *context, uint8_t cfgIndex)
 {
+  context->CfgIndex = cfgIndex;
   CounterValue = 0;
   TimebaseValue = 0;
+
+/*
   __HAL_TIM_SET_PRESCALER(&hTimebase, 800);
+  __HAL_TIM_SET_AUTORELOAD(&hTimebase, 60000);
+*/
+  __HAL_TIM_SET_PRESCALER(&hTimebase, FrMeterConfigs[cfgIndex].TimebasePrescaler);
+  __HAL_TIM_SET_AUTORELOAD(&hTimebase, FrMeterConfigs[cfgIndex].TimebaseAutoReload);
   __HAL_TIM_ENABLE_IT(&hTimebase, TIM_IT_UPDATE);
   TimebaseStart();
   CoutnerStart();
 }
+
+
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
@@ -62,7 +74,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
      _frMeter.Counter = CounterValue;
      CounterValue = 0;
      _frMeter.OutOfRange = 0;
-     HAL_GPIO_TogglePin(TIMEBASE_GPIO_Port, TIMEBASE_Pin);
+     //HAL_GPIO_TogglePin(TIMEBASE_GPIO_Port, TIMEBASE_Pin);
    }
    else if(htim->Instance == TIM_COUNTER)
    {

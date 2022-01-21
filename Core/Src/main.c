@@ -34,7 +34,7 @@
 
 typedef struct _Devic_t
 {
-  FrMeter_t *FreqMeter;
+  FrMeter_t *FrMeter;
 }Device_t;
 
 /* USER CODE END PTD */
@@ -124,9 +124,12 @@ int main(void)
   SSD1306_DrawString("Hello World", &GfxFont7x8, SSD1306_WHITE );
   SSD1306_DisplayUpdate();
 
+  SSD1306_DisplayClear();
+  SSD1306_DisplayUpdate();
+
   /*** FreqMeter ***/
-  Device.FreqMeter = FrMeterInit();
-  FrMeterStart();
+  Device.FrMeter = FrMeterInit();
+  FrMeterStart(Device.FrMeter, FRMETER_CFG_10MS);
 
 #ifdef DEBUG
   printf(VT100_ATTR_RED);
@@ -148,7 +151,23 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    static uint32_t timestamp;
     LiveLedTask(&hLiveLed);
+    char string[50];
+
+    if(HAL_GetTick() - timestamp > 250)
+    {
+      timestamp = HAL_GetTick();
+      SSD1306_SetCursor(0, 1);
+
+      uint32_t f = Device.FrMeter->Counter * FrMeterConfigs[Device.FrMeter->CfgIndex].Multiplier;
+
+      sprintf(string,"f:%02lu %03ld Hz",  f/1000, f % 1000 );
+      SSD1306_DisplayClear();
+      SSD1306_DrawString(string, &GfxFont7x8, SSD1306_WHITE );
+      SSD1306_DisplayUpdate();
+    }
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
