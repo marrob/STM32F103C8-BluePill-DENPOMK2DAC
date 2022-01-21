@@ -29,6 +29,17 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+typedef struct _FreqMeas_t
+{
+  uint16_t Counter;
+
+}FreqMeas_t;
+
+
+typedef struct _Devic_t
+{
+  FreqMeas_t FreqMeter;
+}Device_t;
 
 /* USER CODE END PTD */
 
@@ -51,6 +62,7 @@ UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
 LiveLED_HnadleTypeDef hLiveLed;
+Device_t Device;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -68,7 +80,15 @@ uint8_t DisplayI2CWrite(uint8_t* wdata, size_t wlength);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+   if(htim->Instance == TIM2)
+   {
+     Device.FreqMeter.Counter = TIM1->CNT;
+     TIM1->CNT = 0;
+   }
 
+}
 /* USER CODE END 0 */
 
 /**
@@ -268,6 +288,7 @@ static void MX_TIM1_Init(void)
   }
   /* USER CODE BEGIN TIM1_Init 2 */
 
+  __HAL_TIM_ENABLE(&htim1);
   /* USER CODE END TIM1_Init 2 */
 
 }
@@ -312,7 +333,8 @@ static void MX_TIM2_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN TIM2_Init 2 */
-
+  __HAL_TIM_ENABLE_IT(&htim2, TIM_IT_UPDATE);
+  __HAL_TIM_ENABLE(&htim2);
   /* USER CODE END TIM2_Init 2 */
 
 }
