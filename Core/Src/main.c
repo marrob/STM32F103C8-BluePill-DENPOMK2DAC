@@ -24,23 +24,69 @@
 #include "LiveLed.h"
 #include "vt100.h"
 #include "SSD1306_128x32_I2C.h"
-#include "FrMeter.h"
 #include <stdio.h>
+#include "string.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 
+/*** FreqMeter ***/
+typedef struct _FreqConfig_t
+{
+  uint16_t TimebasePrescaler;
+  uint16_t TimebaseAutoReload;
+  uint16_t Multiplier;
+}FreqConfig_t;
+
+
+typedef struct _FerqMeter_t
+{
+  uint32_t Counter;
+  uint8_t CfgIndex;
+  uint8_t OutOfRange;
+
+}FreqMeter_t;
 
 typedef struct _Devic_t
 {
-  FrMeter_t *FrMeter;
+  FreqMeter_t Freq;
+
+  struct _Diag
+  {
+    uint32_t RxCommandsCounter;
+    uint32_t TxResponseCounter;
+    uint32_t RxDMAErrorCounter;
+    uint32_t DMAstatus;
+    uint32_t UartErrorCounter;
+    uint32_t UartBufferOverflowCnt;
+    uint32_t UpTimeSec;
+  }Diag;
+
 }Device_t;
 
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+
+/*** FreqMeter ***/
+#define FRMETER_TIM_TIMEBASE  TIM2
+#define FRMETER_TIM_COUNTER   TIM1
+
+#define FREQ_CFG_1S      0
+#define FREQ_CFG_100MS   1
+#define FREQ_CFG_10MS    2
+#define FREQ_CFG_1MS     3
+
+#define FreqMeterTimebaseStart()   __HAL_TIM_ENABLE(&htim2)
+#define FreqMeterCoutnerStart()    __HAL_TIM_ENABLE(&htim1)
+#define FreqMeterCounterValue      FRMETER_TIM_COUNTER->CNT
+#define FreqMeterTimebaseValue     FRMETER_TIM_TIMEBASE->CNT
+
+/*** UART ***/
+#define UART_BUFFER_SIZE        40
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -51,27 +97,189 @@ typedef struct _Devic_t
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c2;
 
+TIM_HandleTypeDef htim1;
+TIM_HandleTypeDef htim2;
+
 UART_HandleTypeDef huart1;
+DMA_HandleTypeDef hdma_usart1_rx;
 
 /* USER CODE BEGIN PV */
 LiveLED_HnadleTypeDef hLiveLed;
 Device_t Device;
+
+/*** FreqMeter ***/
+FreqConfig_t FreqMeterConfigs[] =
+{
+/* TimebasePrescaler, TimebaseAutoReload, Multiplier */
+    {800, 60000, 1},  //0 FRMETER_CFG_1S
+    {80, 60000, 10},  //1 FRMETER_CFG_100MS
+    {8, 53400, 100},  //2 FRMETER_CFG_10MS
+    {1, 48000, 1000}  //3
+};
+
+/*** UART ***/
+char UartRxBuffer[UART_BUFFER_SIZE];
+char UartTxBuffer[UART_BUFFER_SIZE];
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_TIM1_Init(void);
+static void MX_TIM2_Init(void);
 static void MX_USART1_UART_Init(void);
+static void MX_DMA_Init(void);
 static void MX_I2C2_Init(void);
 /* USER CODE BEGIN PFP */
+
+/*** LiveLed ***/
 void LiveLedOff(void);
 void LiveLedOn(void);
+
+
+/*** Display ***/
 uint8_t DisplayI2CWrite(uint8_t* wdata, size_t wlength);
+
+/*** FreqMeter ***/
+void FreqMeterStart(FreqMeter_t *context, uint8_t cfgIndex);
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+/* FreqMeter -----------------------------------------------------------------*/
+void FreqMeterStart(FreqMeter_t *context, uint8_t cfgIndex)
+{
+  context->CfgIndex = cfgIndex;
+  FreqMeterCounterValue = 0;
+  FreqMeterTimebaseValue = 0;
+
+  __HAL_TIM_SET_PRESCALER(&htim2, FreqMeterConfigs[cfgIndex].TimebasePrescaler);
+  __HAL_TIM_SET_AUTORELOAD(&htim2, FreqMeterConfigs[cfgIndex].TimebaseAutoReload);
+  __HAL_TIM_ENABLE_IT(&htim2, TIM_IT_UPDATE);
+  FreqMeterTimebaseStart();
+  FreqMeterCoutnerStart();
+}
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+   if(htim->Instance == FRMETER_TIM_TIMEBASE)
+   {
+     Device.Freq.Counter = FreqMeterCounterValue;
+     FreqMeterCounterValue = 0;
+     Device.Freq.OutOfRange = 0;
+     HAL_GPIO_TogglePin(TIMEBASE_GPIO_Port, TIMEBASE_Pin);
+   }
+   else if(htim->Instance == FRMETER_TIM_COUNTER)
+   {
+     Device.Freq.OutOfRange = 1;
+   }
+}
+
+/* UART ----------------------------------------------------------------------*/
+void UartTask(void)
+{
+  uint8_t terminated = 0;
+
+  if(strlen(UartRxBuffer)==0)
+    return;
+
+  for(uint8_t i=0; i<strlen(UartRxBuffer);i++)
+  if(/*UartRxBuffer[i]=='\r' ||*/ UartRxBuffer[i]=='\n')
+  {
+    UartRxBuffer[i]=0;
+    terminated = 1;
+  }
+
+  if(!terminated)
+     return;
+  else
+    HAL_UART_DMAStop(&huart1);
+
+  Device.Diag.RxCommandsCounter++;
+
+  char cmd[20];
+  char arg1[10];
+  char arg2[10];
+  uint8_t params = sscanf(UartRxBuffer, "%s %s %s", cmd, arg1, arg2);
+
+  if(params == 1)
+  {/*** parméter mentes utasitások ***/
+    if(!strcmp(cmd, "*OPC?"))
+    {
+      strcpy(UartTxBuffer, "*OPC");
+    }
+    else if(!strcmp(cmd, "*RDY?"))
+    {
+      strcpy(UartTxBuffer, "*RDY");
+    }
+    else if(!strcmp(cmd, "*WHOIS?"))
+    {
+      strcpy(UartTxBuffer, DEVICE_NAME);
+    }
+    else if(!strcmp(cmd, "*VER?"))
+    {
+      strcpy(UartTxBuffer, DEVICE_FW);
+    }
+    else if(!strcmp(cmd, "*UID?"))
+    {
+      sprintf(UartTxBuffer, "%4lX%4lX%4lX",HAL_GetUIDw0(), HAL_GetUIDw1(), HAL_GetUIDw2());
+    }
+    else if(!strcmp(cmd,"UPTIME?"))
+    {
+      sprintf(UartTxBuffer, "%ld", Device.Diag.UpTimeSec);
+    }
+    else if(!strcmp(cmd,"FRQ?"))
+    {
+      sprintf(UartTxBuffer, "%ld", Device.Freq.Counter);
+    }
+    else
+    {
+      strcpy(UartTxBuffer, "!UNKNOWN");
+    }
+  }
+  if(params == 2)
+  {/*** Paraméteres utasitások ***/
+    strcpy(UartTxBuffer, "!UNKNOWN");
+  }
+
+  uint8_t resp_len =strlen(UartTxBuffer);
+  UartTxBuffer[resp_len]= '\n';
+  UartTxBuffer[++resp_len]= 0;
+
+  HAL_Delay(100);
+  if(strlen(UartTxBuffer)!=0)
+  {
+    Device.Diag.TxResponseCounter++;
+    HAL_UART_Transmit(&huart1, (uint8_t*) UartTxBuffer, sizeof(UartTxBuffer), 100);
+    memset(UartTxBuffer,0x00,UART_BUFFER_SIZE);
+    if(HAL_UART_Receive_DMA(&huart1, (uint8_t*) UartRxBuffer, UART_BUFFER_SIZE) != HAL_OK)
+      Device.Diag.RxDMAErrorCounter++;
+  }
+}
+
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
+{
+  Device.Diag.UartErrorCounter++;
+  /*
+  __HAL_UART_CLEAR_FLAG(huart,UART_CLEAR_PEF);
+  __HAL_UART_CLEAR_FLAG(huart,UART_CLEAR_FEF);
+  __HAL_UART_CLEAR_FLAG(huart,UART_CLEAR_NEF);
+  __HAL_UART_CLEAR_FLAG(huart,UART_CLEAR_OREF);
+
+  Device.Diag.DMAstatus = HAL_DMA_GetError(&hdma_usart1_rx);
+  HAL_UART_DMAStop(&huart1);
+  */
+
+  HAL_UART_MspDeInit(&huart1);
+  MX_USART1_UART_Init();
+
+
+  if(HAL_UART_Receive_DMA(&huart1, (uint8_t*) UartRxBuffer, UART_BUFFER_SIZE) != HAL_OK)
+    Device.Diag.RxDMAErrorCounter++;
+}
 /* USER CODE END 0 */
 
 /**
@@ -102,7 +310,10 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_TIM1_Init();
+  MX_TIM2_Init();
   MX_USART1_UART_Init();
+  MX_DMA_Init();
   MX_I2C2_Init();
   /* USER CODE BEGIN 2 */
 
@@ -110,6 +321,7 @@ int main(void)
   printf(VT100_CURSORHOME);
   printf(VT100_ATTR_RESET);
 
+  /*** Display ***/
   SSD1306_Init(DisplayI2CWrite);
   SSD1306_DisplayClear();
   SSD1306_DisplayUpdate();
@@ -128,22 +340,27 @@ int main(void)
   SSD1306_DisplayUpdate();
 
   /*** FreqMeter ***/
-  Device.FrMeter = FrMeterInit();
-  FrMeterStart(Device.FrMeter, FRMETER_CFG_10MS);
+  FreqMeterStart(&Device.Freq, FREQ_CFG_10MS);
 
+  /*
 #ifdef DEBUG
   printf(VT100_ATTR_RED);
   DeviceUsrLog("This is a DEBUG version.\n");
   printf(VT100_ATTR_RESET);
 #endif
 
+
   DeviceUsrLog("Manufacturer:%s, Version:%04X",DEVICE_MNF, DEVICE_FW);
+*/
 
   /*** LiveLed ***/
   hLiveLed.LedOffFnPtr = &LiveLedOff;
   hLiveLed.LedOnFnPtr = &LiveLedOn;
   hLiveLed.HalfPeriodTimeMs = 500;
   LiveLedInit(&hLiveLed);
+
+  /*** "Kelj fel és járj" ***/
+  HAL_UART_Receive_DMA (&huart1, (uint8_t*)UartRxBuffer, UART_BUFFER_SIZE);
 
   /* USER CODE END 2 */
 
@@ -152,6 +369,7 @@ int main(void)
   while (1)
   {
     static uint32_t timestamp;
+    static uint32_t timestamp1s;
     LiveLedTask(&hLiveLed);
     char string[50];
 
@@ -160,12 +378,19 @@ int main(void)
       timestamp = HAL_GetTick();
       SSD1306_SetCursor(0, 1);
 
-      uint32_t f = Device.FrMeter->Counter * FrMeterConfigs[Device.FrMeter->CfgIndex].Multiplier;
+      uint32_t f = Device.Freq.Counter * FreqMeterConfigs[Device.Freq.CfgIndex].Multiplier;
 
       sprintf(string,"f:%02lu %03ld Hz",  f/1000, f % 1000 );
       SSD1306_DisplayClear();
       SSD1306_DrawString(string, &GfxFont7x8, SSD1306_WHITE );
       SSD1306_DisplayUpdate();
+    }
+
+    if(HAL_GetTick() - timestamp1s > 1000)
+    {
+        timestamp1s = HAL_GetTick();
+        /*** 1sec-es ütem ***/
+        Device.Diag.UpTimeSec++;
     }
 
     /* USER CODE END WHILE */
@@ -248,6 +473,100 @@ static void MX_I2C2_Init(void)
 }
 
 /**
+  * @brief TIM1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM1_Init(void)
+{
+
+  /* USER CODE BEGIN TIM1_Init 0 */
+
+  /* USER CODE END TIM1_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM1_Init 1 */
+
+  /* USER CODE END TIM1_Init 1 */
+  htim1.Instance = TIM1;
+  htim1.Init.Prescaler = 0;
+  htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim1.Init.Period = 65535;
+  htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim1.Init.RepetitionCounter = 0;
+  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_ETRMODE2;
+  sClockSourceConfig.ClockPolarity = TIM_CLOCKPOLARITY_NONINVERTED;
+  sClockSourceConfig.ClockPrescaler = TIM_CLOCKPRESCALER_DIV1;
+  sClockSourceConfig.ClockFilter = 0;
+  if (HAL_TIM_ConfigClockSource(&htim1, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM1_Init 2 */
+
+  /* USER CODE END TIM1_Init 2 */
+
+}
+
+/**
+  * @brief TIM2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM2_Init(void)
+{
+
+  /* USER CODE BEGIN TIM2_Init 0 */
+
+  /* USER CODE END TIM2_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM2_Init 1 */
+
+  /* USER CODE END TIM2_Init 1 */
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 0;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 53400;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM2_Init 2 */
+
+  /* USER CODE END TIM2_Init 2 */
+
+}
+
+/**
   * @brief USART1 Initialization Function
   * @param None
   * @retval None
@@ -277,6 +596,22 @@ static void MX_USART1_UART_Init(void)
   /* USER CODE BEGIN USART1_Init 2 */
 
   /* USER CODE END USART1_Init 2 */
+
+}
+
+/**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA1_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA1_Channel5_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel5_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel5_IRQn);
 
 }
 

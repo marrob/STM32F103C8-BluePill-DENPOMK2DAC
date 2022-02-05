@@ -72,14 +72,15 @@ extern "C" {
 #define DeviceDbgLog(...)
 #endif
 
-#define DEVICE_FW           0x0000
 
-#define DEVICE_MNF          "CoreAudio"
-#define DEVICE_NAME_SIZE    32
-#define DEVICE_FW_SIZE      sizeof(DEVICE_FW)
-#define DEVICE_PCB_SIZE     sizeof(DEVICE_PCB)
-#define DEVICE_MNF_SIZE     sizeof(DEVICE_MNF)
-
+#define DEVICE_NAME             "BLUEPILL"
+#define DEVICE_NAME_SIZE        sizeof(DEVICE_NAME)
+#define DEVICE_FW               "1.0.0.0"
+#define DEVICE_FW_SIZE          sizeof(DEVICDSD_PCME_FW)
+#define DEVICE_PCB              "00"
+#define DEVICE_PCB_SIZE         sizeof(DEVICE_PCB)
+#define DEVICE_MNF              "KONVOLUCIO"
+#define DEVICE_MNF_SIZE         sizeof(DEVICE_MNF)
 /* USER CODE END EM */
 
 /* Exported functions prototypes ---------------------------------------------*/
