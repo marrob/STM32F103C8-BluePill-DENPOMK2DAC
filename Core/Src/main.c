@@ -667,7 +667,9 @@ void LiveLedOff(void)
 int _write(int file, char *ptr, int len)
 {
   //HAL_UART_Transmit(&huart1, (uint8_t*)ptr, len, 100);
-
+  int i=0;
+  for(i=0 ; i<len ; i++)
+    ITM_SendChar((*ptr++));
   return len;
 }
 
